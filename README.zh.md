@@ -33,6 +33,7 @@ dsh plugin --profile web add dsh-plugin-terminal && dsh web
 这类 AI 编码 CLI 是全屏式 TUI（ANSI 转义序列 + 备用屏幕 + truecolor），对终端链路要求高。本插件已针对它们做了渲染调优：
 
 - 子进程环境注入 TERM=xterm-256color、COLORTERM=truecolor（缺失时），非 Windows 下补 LANG/LC_ALL=en_US.UTF-8、PYTHONIOENCODING=utf-8，避免 256 色降级和中英文乱码
+- 子进程 PATH 会剔除 Volta 注入的 tool-image 目录，终端里的 `node`/`npm`/`pnpm` 会按项目切换版本（package.json 的 `"volta"`、`.node-version`），而不是被锁定为 `dsh` 宿主进程所用的 Node 版本
 - xterm.js 6 内置 OSC 10/11/12 应答（Codex 查询终端背景色做主题适配可直接工作）
 - unicodeVersion: "11" 保证中英混排不串位；drawBoldTextInBrightColors: false 保持粗体真实颜色；字体链带 CJK 兜底；回滚 10000 行（服务端环形缓冲 500k 字符）
 

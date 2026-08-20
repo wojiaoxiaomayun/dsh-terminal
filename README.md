@@ -33,6 +33,7 @@ dsh plugin --profile web add dsh-plugin-terminal && dsh web
 These AI coding CLIs are full-screen TUIs (ANSI escapes + alternate screen + truecolor) and demand a lot from the terminal link. The plugin is tuned for them:
 
 - Child env gets TERM=xterm-256color and COLORTERM=truecolor (when unset), plus LANG/LC_ALL=en_US.UTF-8 and PYTHONIOENCODING=utf-8 on non-Windows, preventing 256-color fallback and CJK mojibake
+- Volta's injected tool-image dirs are stripped from the child PATH, so `node`/`npm`/`pnpm` inside the terminal switch per project (package.json `"volta"`, `.node-version`) instead of staying pinned to the Node version the `dsh` host itself runs under
 - xterm.js 6 answers OSC 10/11/12 queries out of the box (Codex theme detection via background-color query just works)
 - unicodeVersion "11" keeps mixed CN/EN output aligned; drawBoldTextInBrightColors: false keeps true colors on bold text; CJK fallbacks in the font stack; 10000-line scrollback (500k-char server ring buffer)
 
