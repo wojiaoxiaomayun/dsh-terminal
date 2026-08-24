@@ -1,5 +1,5 @@
 {
-  "name": "dsh-plugin-terminal",
+  "name": "@dsh-xhl/dsh-plugin-terminal",
   "version": "0.1.12",
   "description": "Bottom terminal panel plugin for DeepSeek Harness Web GUI (node-pty powered, works on Windows via ConPTY)",
   "type": "module",
@@ -9,6 +9,11 @@
     "./client": "./lib/client.js",
     "./package.json": "./package.json",
     "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "author": "wojiaoxiaomayun <1146897508@qq.com>",
+  "homepage": "https://github.com/wojiaoxiaomayun/dsh-terminal#readme",
+  "publishConfig": {
+    "access": "public"
   },
   "dsh": {
     "bundle": {
@@ -32,7 +37,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/siberiah2o/dsh-plugin-terminal.git"
+    "url": "git+https://github.com/wojiaoxiaomayun/dsh-terminal.git"
   },
   "keywords": [
     "dsh",
@@ -48,6 +53,7 @@
     "lib",
     "cordis.patch.yml",
     "src",
+    "docs",
     "README.zh.md"
   ]
 }

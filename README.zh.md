@@ -1,4 +1,4 @@
-# dsh-plugin-terminal
+# @dsh-xhl/dsh-plugin-terminal
 
 DeepSeek Harness (DSH) Web GUI 的底部终端面板插件 —— 在页面底部挂一个真正可交互的多标签 shell（Windows 走 ConPTY，Linux/macOS 走 openpty）。
 
@@ -7,10 +7,10 @@ DeepSeek Harness (DSH) Web GUI 的底部终端面板插件 —— 在页面底�
 ## 安装
 
 ```sh
-dsh plugin --profile web add dsh-plugin-terminal && dsh web
+dsh plugin --profile web add @dsh-xhl/dsh-plugin-terminal && dsh web
 ```
 
-> 注意：这是 DSH（DeepSeek Harness）插件——**不要**用普通 `npm i dsh-plugin-terminal`，必须通过 `dsh plugin` 安装才会被加载。
+> 注意：这是 DSH（DeepSeek Harness）插件——**不要**用普通 `npm i @dsh-xhl/dsh-plugin-terminal`，必须通过 `dsh plugin` 安装才会被加载。
 
 ## 截图
 

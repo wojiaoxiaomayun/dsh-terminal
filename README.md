@@ -1,4 +1,4 @@
-# dsh-plugin-terminal
+# @dsh-xhl/dsh-plugin-terminal
 
 Bottom terminal panel for the DeepSeek Harness (DSH) Web GUI — an interactive multi-tab shell pinned to the bottom of the page (ConPTY on Windows, openpty on Linux/macOS).
 
@@ -7,10 +7,10 @@ Bottom terminal panel for the DeepSeek Harness (DSH) Web GUI — an interactive 
 ## Install
 
 ```sh
-dsh plugin --profile web add dsh-plugin-terminal && dsh web
+dsh plugin --profile web add @dsh-xhl/dsh-plugin-terminal && dsh web
 ```
 
-> Note: this is a DSH (DeepSeek Harness) plugin — do **not** use plain `npm i dsh-plugin-terminal`; it must be installed through `dsh plugin` to activate.
+> Note: this is a DSH (DeepSeek Harness) plugin — do **not** use plain `npm i @dsh-xhl/dsh-plugin-terminal`; it must be installed through `dsh plugin` to activate.
 
 ## Screenshots
 
