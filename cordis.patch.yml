@@ -4,4 +4,4 @@
 # into dsh.profile.bundles and this layer is applied automatically.
 - insert:
   - id: terminal-panel
-    name: @dsh-xhl/dsh-plugin-terminal
+    name: "@dsh-xhl/dsh-plugin-terminal"
