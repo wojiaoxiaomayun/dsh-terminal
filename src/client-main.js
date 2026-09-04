@@ -634,6 +634,14 @@ function TerminalPanel(props) {
     const key = normPath(workspaceCwd);
     if (followHandledRef.current === key) return;
     followHandledRef.current = key;
+    /* One live terminal per workspace: a tab whose process died while its pane
+     * was unmounted (panel collapsed, or a different workspace on screen) comes
+     * back from the host as restored history (exited) on the next mount. Drop
+     * those dead tabs here so they never linger beside a fresh replacement as a
+     * "已退出" duplicate - the live tab below is the only one that should stay. */
+    for (const dead of tabs.filter((t) => t.exited && normPath(t.cwd) === key)) {
+      closeTab(dead.id);
+    }
     const live = tabs.find((t) => !t.exited && normPath(t.cwd) === key);
     if (live) {
       setActiveId(live.id);
@@ -642,7 +650,7 @@ function TerminalPanel(props) {
     }
     openHandled.current = true;
     setOpen(true);
-  }, [bootReady, workspaceCwd, tabs, newTab]);
+  }, [bootReady, workspaceCwd, tabs, newTab, closeTab]);
 
   /* header refresh: restart the active tab IN PLACE via the host restart
    * route, which respawns the shell and INHERITS the old scrollback - the
