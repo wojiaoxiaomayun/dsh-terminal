@@ -86,11 +86,20 @@ const post = (path, body) =>
   });
 const del = (path) => api(path, { method: "DELETE" }).catch(() => {});
 const prettyShell = (s) => (s ?? "shell").replace(/\.exe$/i, "");
-/* server titles look like "pwsh.exe #3" - show "pwsh 3" */
+/* label names the *workspace* (the terminal's cwd dir) first, e.g.
+ * "dsh-terminal", and falls back to the shell when no cwd was resolved (so
+ * fresh tabs don't all read "powershell"). A "#N" suffix disambiguates when
+ * a workspace ends up with more than one tab. */
 function tabLabel(tab) {
-  const m = /#(\d+)$/.exec(tab.title ?? "");
+  if (typeof tab.cwd === "string" && tab.cwd.length > 0) {
+    const dir = tab.cwd.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop();
+    if (dir) {
+      const m = /#(\d+)$/.exec(tab.title ?? "");
+      return m === null ? dir : dir + " " + m[1];
+    }
+  }
   const base = prettyShell(tab.shell);
-  return m === null ? base : base + " " + m[1];
+  return base;
 }
 /* Normalize a filesystem path for the per-workspace dedup: lowercase,
  * `\` -> `/`, collapse doubled slashes, drop the trailing slash. Windows is
@@ -509,20 +518,21 @@ function TerminalPanel(props) {
       setBusy(true);
       try {
         const list = await api("/sessions");
-        /* Restore ALL sessions the host still knows: live PTYs AND exited
-         * history (persisted across dsh web restarts). Exited tabs replay
-         * their scrollback over the WS and show as restartable. */
+        /* Restore only LIVE sessions as real tabs. The host keeps exited
+         * sessions as persistent (cross-restart) history, but surfacing them
+         * all as tabs on every boot just leaves a pile of dead "已退出" tabs
+         * that the per-workspace model should instead rebuild on demand. */
         const all = list.sessions ?? [];
-        if (all.length > 0) {
-          setTabs(all.map((x) => ({
+        const live = all.filter((x) => !x.exited);
+        if (live.length > 0) {
+          setTabs(live.map((x) => ({
             id: x.id,
             title: x.title,
             shell: x.shell,
             cwd: typeof x.cwd === 'string' ? x.cwd : null,
             exited: !!x.exited,
           })));
-          const lastLive = [...all].reverse().find((x) => !x.exited);
-          setActiveId((lastLive ?? all[all.length - 1]).id);
+          setActiveId(live[live.length - 1].id);
         }
       } catch (err) {
         console.error("[dsh-plugin-terminal] restore failed:", err);
