@@ -92,6 +92,14 @@ function tabLabel(tab) {
   const base = prettyShell(tab.shell);
   return m === null ? base : base + " " + m[1];
 }
+/* Normalize a filesystem path for the per-workspace dedup: lowercase,
+ * `\` -> `/`, collapse doubled slashes, drop the trailing slash. Windows is
+ * the primary target (case-insensitive), so lowercasing makes the "is this
+ * terminal already open in the current workspace" match reliable. */
+function normPath(p) {
+  if (typeof p !== "string") return "";
+  return p.replace(/\\/g, "/").replace(/\/{2,}/g, "/").replace(/\/$/g, "").toLowerCase();
+}
 
 /* icons on the official 14/16px grids */
 function TerminalGlyph14() {
@@ -215,11 +223,19 @@ function TermPane({ tab, active, onExit }) {
       }
     };
     ws.onmessage = (ev) => term.write(ev.data);
-    ws.onclose = () => {
-      if (wsRef.current === ws) {
-        wsRef.current = null;
-        onExit(tab.id);
-      }
+    /* Whether this pane attached to a LIVE process at mount. Restored history
+     * tabs (tab.exited === true) replay their buffer and then receive the same
+     * "session exited" close, but must NOT auto-close - they are the
+     * restartable survivors of a dsh web restart. */
+    const wasLive = !tab.exited;
+    ws.onclose = (ev) => {
+      if (wsRef.current !== ws) return;
+      wsRef.current = null;
+      /* Only a server-initiated "session exited" close means the PTY died.
+       * A client-initiated close (unmount cleanup, network error) leaves the
+       * process alive on the host, so the tab must stay open. */
+      if (ev.reason !== "session exited") return;
+      onExit(tab.id, wasLive);
     };
     ws.onerror = () => ws.close();
     wsRef.current = ws;
@@ -430,6 +446,9 @@ function TerminalPanel(props) {
   const bootOnce = useRef(false);
   const [bootReady, setBootReady] = useState(false);
   const openHandled = useRef(false);
+  /** normalized workspace path this mount has already followed (activate-or-create);
+   *  guards the follow effect so a settling mount never re-fires it */
+  const followHandledRef = useRef(null);
   const rootRef = useRef(null);
   /** conversation-column geometry: the panel never covers the side rails */
   const [geo, setGeo] = useState({ left: 0, width: window.innerWidth });
@@ -559,9 +578,32 @@ function TerminalPanel(props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [shortcut]);
 
-  const onExit = useCallback((id) => {
-    setTabs((cur) => cur.map((t) => (t.id === id ? { ...t, exited: true } : t)));
+  /* x on a tab: delete session, drop tab, activate a neighbor. Also marks the
+   * panel as user-managed so an emptied strip does NOT auto-create a fresh
+   * terminal (only a fresh open does). */
+  const closeTab = useCallback(async (id) => {
+    openHandled.current = true;
+    setTabs((cur) => {
+      const idx = cur.findIndex((t) => t.id === id);
+      if (idx === -1) return cur;
+      const next = cur.filter((t) => t.id !== id);
+      setActiveId((act) => {
+        if (act !== id) return act;
+        if (next.length === 0) return null;
+        return (next[Math.min(idx, next.length - 1)] ?? next[0]).id;
+      });
+      return next;
+    });
+    await del("/sessions/" + id);
   }, []);
+
+  /* A live tab whose process died on its own is auto-closed: the dead pane is
+   * useless and only blocks the body below. Restored history tabs carry
+   * wasLive=false and stay open so they can still be restarted. */
+  const onExit = useCallback((id, wasLive) => {
+    if (wasLive) closeTab(id);
+    else setTabs((cur) => cur.map((t) => (t.id === id ? { ...t, exited: true } : t)));
+  }, [closeTab]);
 
   /* + button: new session in a new tab, spawned in the current workspace.
    *  sessionId rides along so the host can resolve the workspace path through
@@ -580,21 +622,27 @@ function TerminalPanel(props) {
     }
   }, [workspaceCwd, active?.cwd, sessionId]);
 
-  /* x on a tab: delete session, drop tab, activate a neighbor */
-  const closeTab = useCallback(async (id) => {
-    setTabs((cur) => {
-      const idx = cur.findIndex((t) => t.id === id);
-      if (idx === -1) return cur;
-      const next = cur.filter((t) => t.id !== id);
-      setActiveId((act) => {
-        if (act !== id) return act;
-        if (next.length === 0) return null;
-        return (next[Math.min(idx, next.length - 1)] ?? next[0]).id;
-      });
-      return next;
-    });
-    await del("/sessions/" + id);
-  }, []);
+  /* Follow the CURRENT workspace: once boot restore is done and this mount's
+   * workspace path is known, activate the live terminal already rooted there,
+   * or create one when none is alive — then expand the panel so the terminal
+   * is visible and focused. Runs once per mount per workspace (guarded by
+   * followHandledRef); the open effect's auto-create is pre-empted via
+   * openHandled so a fresh workspace never spawns two PTYs. */
+  useEffect(() => {
+    if (!bootReady) return;
+    if (typeof workspaceCwd !== "string" || workspaceCwd.length === 0) return;
+    const key = normPath(workspaceCwd);
+    if (followHandledRef.current === key) return;
+    followHandledRef.current = key;
+    const live = tabs.find((t) => !t.exited && normPath(t.cwd) === key);
+    if (live) {
+      setActiveId(live.id);
+    } else {
+      newTab();
+    }
+    openHandled.current = true;
+    setOpen(true);
+  }, [bootReady, workspaceCwd, tabs, newTab]);
 
   /* header refresh: restart the active tab IN PLACE via the host restart
    * route, which respawns the shell and INHERITS the old scrollback - the
