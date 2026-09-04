@@ -27,6 +27,9 @@ const OPEN_KEY = "dsh-plugin-terminal.open";
  * (saves resources) until the user switches the toggle on in the settings
  * panel. */
 const AUTOFLLOW_PREFIX = "dsh-plugin-terminal.autofollow.";
+/* drag-to-reorder state: tab-id order in the strip, persisted so a manual
+ * drag survives boot restore (which re-sorts // the server's creation order). */
+const ORDER_KEY = "dsh-plugin-terminal.taborder";
 const MIN_HEIGHT = 120;
 
 /* per-workspace auto-open preference (default: off). Keyed by normalized path
@@ -51,7 +54,7 @@ if (typeof document !== "undefined" && document.getElementById(XTERM_CSS_TAG) ==
 
 /* Codex-style bottom panel skin (DSH design tokens; terminal surface dark). */
 const STYLE_TAG = "dsh-plugin-terminal-styles";
-const PANEL_CSS = ".dshTermRoot{position:fixed;bottom:0;z-index:50;font-family:Inter,var(--dsw-font-family)}\n.dshTermBar{box-sizing:border-box;width:100%;height:34px;display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--dsw-specific-tip);border-top:1px solid var(--dsw-alias-border-l1);cursor:pointer;color:var(--dsw-alias-label-primary);text-align:left;user-select:none;-webkit-user-select:none}\n.dshTermBar:focus-visible{outline:2px solid var(--dsw-alias-label-tertiary);outline-offset:-2px}\n.dshTermBarLead{color:var(--dsw-alias-label-tertiary);flex:none;place-items:center;display:grid}\n.dshTermBarTitle{min-width:0;flex:none;font-size:13px;font-weight:500;line-height:24px}\n.dshTermBarState{min-width:0;flex:auto;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.dshTermBarActions{flex:none;align-items:center;gap:2px;display:flex}\n.dshTermBarAction{width:28px;height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;border-radius:999px;flex:none;place-items:center;padding:0;display:grid}\n.dshTermBarAction:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermBarAction:focus-visible{outline:2px solid var(--dsw-alias-label-tertiary);outline-offset:-2px}\n.dshTermBarAction:disabled{cursor:default;opacity:.45}\n.dshTermBarChevron{width:28px;height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;border-radius:999px;flex:none;place-items:center;padding:0;display:grid}\n.dshTermBarChevron:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}\n.dshTermPanel{box-sizing:border-box;width:100%;display:flex;flex-direction:column;background:var(--dsw-specific-tip);border-top:1px solid var(--dsw-alias-border-l1);overflow:hidden;animation:dshTermIn .16s ease-out}\n@keyframes dshTermIn{from{transform:translateY(14px);opacity:.4}to{transform:none;opacity:1}}\n.dshTermResize{flex:none;height:6px;cursor:ns-resize;touch-action:none;position:relative}\n.dshTermResize:after{content:'';position:absolute;left:0;right:0;top:2px;height:2px;border-radius:2px;background:transparent;transition:background .15s}\n.dshTermResize:hover:after{background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermTabs{flex:none;box-sizing:border-box;height:36px;display:flex;align-items:center;gap:2px;padding:0 10px;border-bottom:1px solid var(--dsw-alias-border-l1);background:var(--dsw-specific-tip)}\n.dshTermTabsScroll{flex:1;min-width:0;display:flex;align-items:center;gap:2px;height:100%;overflow-x:auto;scrollbar-width:none}\n.dshTermTabsScroll::-webkit-scrollbar{display:none}\n.dshTermTabsLead{color:var(--dsw-alias-label-tertiary);flex:none;display:grid;place-items:center;margin-right:2px}\n.dshTermTabsState{flex:none;max-width:180px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0 6px}\n.dshTermTab{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 6px 0 9px;border-radius:7px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font-family:Inter,var(--dsw-font-family);font-size:12px;font-weight:500;cursor:pointer;flex:none;max-width:200px}\n.dshTermTab:hover{background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermTab.isActive{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}\n.dshTermTab:focus-visible{outline:2px solid var(--dsw-alias-label-tertiary);outline-offset:-2px}\n.dshTermTab.isExited{opacity:.5}\n.dshTermTab.isExited .dshTermTabLabel{text-decoration:line-through;text-decoration-thickness:1px}\n.dshTermTabLabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.dshTermTabLead{display:grid;place-items:center;flex:none;opacity:.7}\n.dshTermTabClose{width:20px;height:20px;border:none;background:transparent;color:inherit;border-radius:6px;display:grid;place-items:center;cursor:pointer;padding:0;opacity:0;flex:none}\n.dshTermTab:hover .dshTermTabClose,.dshTermTab.isActive .dshTermTabClose{opacity:.65}\n.dshTermTabClose:hover{opacity:1;background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermNew{width:26px;height:26px;flex:none;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);border-radius:7px;display:grid;place-items:center;cursor:pointer;padding:0}\n.dshTermNew:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}\n.dshTermNew:focus-visible{outline:2px solid var(--dsw-alias-label-tertiary);outline-offset:-2px}\n.dshTermNew:disabled{cursor:default;opacity:.45}\n.dshTermCollapse{flex:none;display:grid;place-items:center;width:26px;height:26px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);border-radius:7px;cursor:pointer;padding:0}\n.dshTermCollapse:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}\n.dshTermBody{flex:auto;min-height:0;position:relative;background:#1e2128;box-shadow:inset 0 1px 0 var(--dsw-alias-border-l1)}\n.dshTermPane{position:absolute;inset:0;display:none;padding:4px 10px 8px;background:#1e2128}\n.dshTermPane.isActive{display:block}\n.dshTermEmpty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#8b90a0;font-family:Inter,var(--dsw-font-family);font-size:12px}\n.dshTermEmptyBtn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:8px;border:1px solid var(--dsw-alias-border-l1);background:#2a2e38;color:#e6e8ee;font-family:Inter,var(--dsw-font-family);font-size:12px;font-weight:500;cursor:pointer}\n.dshTermEmptyBtn:hover{background:#343946}\nbody.dshTermResizing{cursor:ns-resize!important;user-select:none!important;-webkit-user-select:none!important}\n.dshTermSettings{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;background:rgba(8,10,14,.45);backdrop-filter:blur(2px);padding:24px;box-sizing:border-box}\n.dshTermSettingsCard{width:min(460px,92vw);max-height:70vh;overflow:auto;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-surface-secondary,#1c1f27);color:var(--dsw-alias-label-primary);box-shadow:0 18px 60px rgba(0,0,0,.45);font-family:Inter,var(--dsw-font-family);display:flex;flex-direction:column}\n.dshTermSettingsHead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 14px 6px;flex:none;font-size:13px;font-weight:600}\n.dshTermSettingsTitle{min-width:0}\n.dshTermSettingsHint{padding:0 14px 10px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5}\n.dshTermSettingsList{display:flex;flex-direction:column;padding:0 10px 12px;gap:2px}\n.dshTermSettingsRow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:12.5px}\n.dshTermSettingsRow:hover{background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermSettingsRow.dshTermSettingsMuted{color:var(--dsw-alias-label-tertiary);justify-content:center;cursor:default}\n.dshTermSettingsName{min-width:0;display:flex;flex-direction:column;gap:1px}\n.dshTermSettingsDir{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.dshTermSettingsPath{color:var(--dsw-alias-label-tertiary);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.dshTermSettingsToggle{flex:none;width:34px;height:20px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-interactive-bg-hover);cursor:pointer;padding:0;position:relative;transition:background .15s}\n.dshTermSettingsToggle.isOn{background:#3b82f6;border-color:#3b82f6}\n.dshTermSettingsToggleKnob{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s}\n.dshTermSettingsToggle.isOn .dshTermSettingsToggleKnob{transform:translateX(14px)}";
+const PANEL_CSS = ".dshTermRoot{position:fixed;bottom:0;z-index:50;font-family:Inter,var(--dsw-font-family)}\n.dshTermBar{box-sizing:border-box;width:100%;height:34px;display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--dsw-specific-tip);border-top:1px solid var(--dsw-alias-border-l1);cursor:pointer;color:var(--dsw-alias-label-primary);text-align:left;user-select:none;-webkit-user-select:none}\n.dshTermBar:focus-visible{outline:2px solid var(--dsw-alias-label-tertiary);outline-offset:-2px}\n.dshTermBarLead{color:var(--dsw-alias-label-tertiary);flex:none;place-items:center;display:grid}\n.dshTermBarTitle{min-width:0;flex:none;font-size:13px;font-weight:500;line-height:24px}\n.dshTermBarState{min-width:0;flex:auto;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.dshTermBarActions{flex:none;align-items:center;gap:2px;display:flex}\n.dshTermBarAction{width:28px;height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;border-radius:999px;flex:none;place-items:center;padding:0;display:grid}\n.dshTermBarAction:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermBarAction:focus-visible{outline:2px solid var(--dsw-alias-label-tertiary);outline-offset:-2px}\n.dshTermBarAction:disabled{cursor:default;opacity:.45}\n.dshTermBarChevron{width:28px;height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;border-radius:999px;flex:none;place-items:center;padding:0;display:grid}\n.dshTermBarChevron:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}\n.dshTermPanel{box-sizing:border-box;width:100%;display:flex;flex-direction:column;background:var(--dsw-specific-tip);border-top:1px solid var(--dsw-alias-border-l1);overflow:hidden}\n.dshTermPanel.isEntering{animation:dshTermIn .16s ease-out}\n@keyframes dshTermIn{from{transform:translateY(14px);opacity:.4}to{transform:none;opacity:1}}\n.dshTermResize{flex:none;height:6px;cursor:ns-resize;touch-action:none;position:relative}\n.dshTermResize:after{content:'';position:absolute;left:0;right:0;top:2px;height:2px;border-radius:2px;background:transparent;transition:background .15s}\n.dshTermResize:hover:after{background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermTabs{flex:none;box-sizing:border-box;height:36px;display:flex;align-items:center;gap:2px;padding:0 10px;border-bottom:1px solid var(--dsw-alias-border-l1);background:var(--dsw-specific-tip)}\n.dshTermTabsScroll{flex:1;min-width:0;display:flex;align-items:center;gap:2px;height:100%;overflow-x:auto;scrollbar-width:none}\n.dshTermTabsScroll::-webkit-scrollbar{display:none}\n.dshTermTabsLead{color:var(--dsw-alias-label-tertiary);flex:none;display:grid;place-items:center;margin-right:2px}\n.dshTermTabsState{flex:none;max-width:180px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0 6px}\n.dshTermTab{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 6px 0 9px;border-radius:7px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font-family:Inter,var(--dsw-font-family);font-size:12px;font-weight:500;cursor:pointer;flex:none;max-width:200px}\n.dshTermTab:hover{background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermTab.isActive{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}\n.dshTermTab:focus-visible{outline:2px solid var(--dsw-alias-label-tertiary);outline-offset:-2px}\n.dshTermTab.isExited{opacity:.5}\n.dshTermTab.isExited .dshTermTabLabel{text-decoration:line-through;text-decoration-thickness:1px}\n.dshTermTabLabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.dshTermTabLead{display:grid;place-items:center;flex:none;opacity:.7}\n.dshTermTabClose{width:20px;height:20px;border:none;background:transparent;color:inherit;border-radius:6px;display:grid;place-items:center;cursor:pointer;padding:0;opacity:0;flex:none}\n.dshTermTab:hover .dshTermTabClose,.dshTermTab.isActive .dshTermTabClose{opacity:.65}\n.dshTermTabClose:hover{opacity:1;background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermTab.isDragging{opacity:.55;transform:scale(.97);box-shadow:0 6px 18px rgba(0,0,0,.35)}body.dshTermDragging,body.dshTermDragging *{cursor:grabbing!important;user-select:none!important;-webkit-user-select:none!important}\n.dshTermNew{width:26px;height:26px;flex:none;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);border-radius:7px;display:grid;place-items:center;cursor:pointer;padding:0}\n.dshTermNew:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}\n.dshTermNew:focus-visible{outline:2px solid var(--dsw-alias-label-tertiary);outline-offset:-2px}\n.dshTermNew:disabled{cursor:default;opacity:.45}\n.dshTermCollapse{flex:none;display:grid;place-items:center;width:26px;height:26px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);border-radius:7px;cursor:pointer;padding:0}\n.dshTermCollapse:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}\n.dshTermBody{flex:auto;min-height:0;position:relative;background:#1e2128;box-shadow:inset 0 1px 0 var(--dsw-alias-border-l1)}\n.dshTermPane{position:absolute;inset:0;display:none;padding:4px 10px 8px;background:#1e2128}\n.dshTermPane.isActive{display:block}\n.dshTermEmpty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#8b90a0;font-family:Inter,var(--dsw-font-family);font-size:12px}\n.dshTermEmptyBtn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:8px;border:1px solid var(--dsw-alias-border-l1);background:#2a2e38;color:#e6e8ee;font-family:Inter,var(--dsw-font-family);font-size:12px;font-weight:500;cursor:pointer}\n.dshTermEmptyBtn:hover{background:#343946}\nbody.dshTermResizing{cursor:ns-resize!important;user-select:none!important;-webkit-user-select:none!important}\n.dshTermSettings{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;background:rgba(8,10,14,.45);backdrop-filter:blur(2px);padding:24px;box-sizing:border-box}\n.dshTermSettingsCard{width:min(460px,92vw);max-height:70vh;overflow:auto;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-surface-secondary,#1c1f27);color:var(--dsw-alias-label-primary);box-shadow:0 18px 60px rgba(0,0,0,.45);font-family:Inter,var(--dsw-font-family);display:flex;flex-direction:column}\n.dshTermSettingsHead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 14px 6px;flex:none;font-size:13px;font-weight:600}\n.dshTermSettingsTitle{min-width:0}\n.dshTermSettingsHint{padding:0 14px 10px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5}\n.dshTermSettingsList{display:flex;flex-direction:column;padding:0 10px 12px;gap:2px}\n.dshTermSettingsRow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:12.5px}\n.dshTermSettingsRow:hover{background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermSettingsRow.dshTermSettingsMuted{color:var(--dsw-alias-label-tertiary);justify-content:center;cursor:default}\n.dshTermSettingsName{min-width:0;display:flex;flex-direction:column;gap:1px}\n.dshTermSettingsDir{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.dshTermSettingsPath{color:var(--dsw-alias-label-tertiary);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.dshTermSettingsToggle{flex:none;width:34px;height:20px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-interactive-bg-hover);cursor:pointer;padding:0;position:relative;transition:background .15s}\n.dshTermSettingsToggle.isOn{background:#3b82f6;border-color:#3b82f6}\n.dshTermSettingsToggleKnob{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s}\n.dshTermSettingsToggle.isOn .dshTermSettingsToggleKnob{transform:translateX(14px)}";
 if (typeof document !== "undefined" && document.getElementById(STYLE_TAG) === null) {
   const tag = document.createElement("style");
   tag.id = STYLE_TAG;
@@ -106,8 +109,9 @@ const del = (path) => api(path, { method: "DELETE" }).catch(() => {});
 const prettyShell = (s) => (s ?? "shell").replace(/\.exe$/i, "");
 /* label names the *workspace* (the terminal's cwd dir) first, e.g.
  * "dsh-terminal", and falls back to the shell when no cwd was resolved (so
- * fresh tabs don't all read "powershell"). A "#N" suffix disambiguates when
- * a workspace ends up with more than one tab. */
+ * fresh tabs don't all read "powershell"). A "#N" suffix is the per-workspace
+ * ordinal from the host (Nth terminal spawned in that workspace) and
+ * disambiguates when a workspace ends up with more than one tab. */
 function tabLabel(tab) {
   if (typeof tab.cwd === "string" && tab.cwd.length > 0) {
     const dir = tab.cwd.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop();
@@ -126,6 +130,17 @@ function tabLabel(tab) {
 function normPath(p) {
   if (typeof p !== "string") return "";
   return p.replace(/\\/g, "/").replace(/\/{2,}/g, "/").replace(/\/$/g, "").toLowerCase();
+}
+/* persisted tab order -> ordered list of session ids (unknown ids skip). */
+function readSavedOrder() {
+  try {
+    const raw = localStorage.getItem(ORDER_KEY);
+    if (typeof raw === "string" && raw.length > 0) {
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : [];
+    }
+  } catch { /* storage unavailable or corrupt */ }
+  return [];
 }
 
 /* icons on the official 14/16px grids */
@@ -456,6 +471,16 @@ function TerminalPanel(props) {
     } catch { /* storage unavailable */ }
     return false;
   });
+  /* True only when the panel was just opened by a USER action (toggle button
+   * or shortcut) within this mount, so the .isEntering slide-in animation
+   * plays once. A panel restored already-open on a session switch must NOT
+   * replay it - that was the "flash" on every conversation switch. */
+  const [entering, setEntering] = useState(false);
+  useEffect(() => {
+    if (!entering) return;
+    const t = setTimeout(() => setEntering(false), 200);
+    return () => clearTimeout(t);
+  }, [entering]);
   /* persist the panel position so a session switch restores the user's last
    * manual expand/collapse choice instead of force-opening the panel */
   useEffect(() => {
@@ -507,6 +532,13 @@ function TerminalPanel(props) {
   const bootOnce = useRef(false);
   const [bootReady, setBootReady] = useState(false);
   const openHandled = useRef(false);
+  /** Re-entrancy guard so the "first open" effect and the follow-workspace
+   *  effect never BOTH fire newTab() in the same tick. Both can run on the
+   *  first bootReady render when the current workspace has no live session
+   *  yet (e.g. a freshly created workspace session), and newTab() is async -
+   *  `tabs` is still empty in between, so neither sees the other's terminal
+   *  via `tabs`. The guard must be set synchronously before the call. */
+  const creatingRef = useRef(false);
   /** normalized workspace path this mount has already followed (activate-or-create);
    *  guards the follow effect so a settling mount never re-fires it */
   const followHandledRef = useRef(null);
@@ -553,6 +585,13 @@ function TerminalPanel(props) {
     }
   }, [settingsOpen, refreshWorkspaces]);
   const rootRef = useRef(null);
+  /** tab strip scroll container + live drag-reorder state */
+  const tabsScrollRef = useRef(null);
+  /** { id, index } of the tab currently being dragged, or null when idle */
+  const dragRef = useRef(null);
+  const [draggingId, setDraggingId] = useState(null);
+  /* a drag that ends on the same tab must not also flip it active */
+  const suppressClickRef = useRef(false);
   /** conversation-column geometry: the panel never covers the side rails */
   const [geo, setGeo] = useState({ left: 0, width: window.innerWidth });
 
@@ -619,14 +658,27 @@ function TerminalPanel(props) {
         const all = list.sessions ?? [];
         const live = all.filter((x) => !x.exited);
         if (live.length > 0) {
-          setTabs(live.map((x) => ({
+          /* Re-apply any persisted drag-to-reorder order so a manual tab
+           * sequence survives reloads / workspace switches. Unknown ids fall
+           * behind the known ones, keeping their relative creation order. */
+          const saved = readSavedOrder();
+          const orderMap = new Map(saved.map((id, i) => [id, i]));
+          const sorted = live.slice().sort((a, b) => {
+            const ia = orderMap.get(a.id);
+            const ib = orderMap.get(b.id);
+            if (ia === undefined && ib === undefined) return 0;
+            if (ia === undefined) return 1;
+            if (ib === undefined) return -1;
+            return ia - ib;
+          });
+          setTabs(sorted.map((x) => ({
             id: x.id,
             title: x.title,
             shell: x.shell,
             cwd: typeof x.cwd === 'string' ? x.cwd : null,
             exited: !!x.exited,
           })));
-          setActiveId(live[live.length - 1].id);
+          setActiveId(sorted[sorted.length - 1].id);
         }
       } catch (err) {
         console.error("[dsh-plugin-terminal] restore failed:", err);
@@ -649,7 +701,12 @@ function TerminalPanel(props) {
     if (!bootReady || tabs.length > 0 || openHandled.current) return;
     if (typeof workspaceCwd !== "string" || workspaceCwd.length === 0 || !getAutofollow(normPath(workspaceCwd))) return;
     openHandled.current = true;
-    newTab();
+    /* guard in place: the follow-workspace effect (declared below) also
+     * activates-or-creates for the same workspace and runs on this same
+     * render; without the synchronous lock both would spawn a terminal. */
+    if (creatingRef.current) return;
+    creatingRef.current = true;
+    newTab().finally(() => { creatingRef.current = false; });
   }, [open, bootReady, tabs.length, workspaceCwd]);
 
   /* fetch the host-side plugin config: the toggle shortcut (and, for future
@@ -679,7 +736,9 @@ function TerminalPanel(props) {
       if (!matchesShortcut(shortcut, e)) return;
       if (e.target instanceof HTMLElement && e.target.closest(".dshTermPane") !== null) return;
       e.preventDefault();
-      setOpen((v) => !v);
+      /* ref indirection so this window listener never re-binds when `open`
+       * changes (toggle's identity depends on it) */
+      toggleRef.current();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -729,39 +788,130 @@ function TerminalPanel(props) {
     }
   }, [workspaceCwd, active?.cwd, sessionId]);
 
+  /* persist the current tab order so a manual drag survives reloads/switches */
+  useEffect(() => {
+    try {
+      localStorage.setItem(ORDER_KEY, JSON.stringify(tabs.map((t) => t.id)));
+    } catch { /* storage unavailable */ }
+  }, [tabs]);
+
+  /** Move a tab from one strip index to another (no-op if unchanged). */
+  const moveTab = useCallback((from, to) => {
+    if (from === to) return;
+    setTabs((cur) => {
+      if (from < 0 || to < 0 || from >= cur.length || to >= cur.length) return cur;
+      const next = cur.slice();
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }, []);
+
+  /** Drag-to-reorder: pointer drag over the tab strip reorders in place.
+   *  Left-button only; the tab's own close button never starts a drag. A drag
+   *  only counts once the pointer moves ~4px, so a plain click still activates
+   *  the tab (and a real drag does not accidentally flip it active). */
+  const startTabDrag = useCallback((e, tabId) => {
+    if (e.button !== 0) return;
+    if (e.target instanceof HTMLElement && e.target.closest(".dshTermTabClose") !== null) return;
+    const scroll = tabsScrollRef.current;
+    if (scroll === null) return;
+    const tabsEls = Array.from(scroll.querySelectorAll(".dshTermTab"));
+    const index = tabsEls.findIndex((el) => el.dataset.tabId === tabId);
+    if (index === -1) return;
+    const st = { id: tabId, index, startX: e.clientX, startY: e.clientY, moved: false };
+    dragRef.current = st;
+    const move = (ev) => {
+      const s = dragRef.current;
+      if (s === null || scroll.isConnected === false) return;
+      if (!s.moved) {
+        if (Math.abs(ev.clientX - s.startX) < 4 && Math.abs(ev.clientY - s.startY) < 4) return;
+        s.moved = true;
+        setDraggingId(tabId);
+        document.body.classList.add("dshTermDragging");
+      }
+      /* autoscroll when hovering the strip edges (tabs can overflow) */
+      const r = scroll.getBoundingClientRect();
+      if (ev.clientX < r.left + 44) scroll.scrollLeft -= 10;
+      else if (ev.clientX > r.right - 44) scroll.scrollLeft += 10;
+      /* target = tab whose midpoint the pointer crossed, aligned to the
+       * current DOM order */
+      const els = Array.from(scroll.querySelectorAll(".dshTermTab"));
+      let target = s.index;
+      for (let i = 0; i < els.length; i++) {
+        const er = els[i].getBoundingClientRect();
+        if (ev.clientX < er.left + er.width / 2) {
+          target = i;
+          break;
+        }
+      }
+      const dest = target > s.index ? target - 1 : target;
+      if (dest === s.index) return;
+      moveTab(s.index, dest);
+      s.index = dest;
+    };
+    const up = () => {
+      const s = dragRef.current;
+      dragRef.current = null;
+      setDraggingId(null);
+      document.body.classList.remove("dshTermDragging");
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      /* a finished drag should not also trigger the tab's own onClick (which
+       * would flip it active); suppress the click that immediately follows */
+      if (s !== null && s.moved) {
+        suppressClickRef.current = true;
+        setTimeout(() => { suppressClickRef.current = false; }, 0);
+      }
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  }, [moveTab]);
+
   /* Follow the CURRENT workspace: once boot restore is done and this mount's
    * workspace path is known, activate the live terminal already rooted there,
-   * or create one when none is alive. This ONLY runs when auto-open is enabled
-   * for that workspace (settings panel toggle) - defaults to OFF so switching
-   * workspaces does not spawn terminals from nowhere. Runs once per mount per
-   * workspace (guarded by followHandledRef); the open effect's auto-create is
-   * pre-empted via openHandled so a fresh workspace never spawns two PTYs. */
+   * or create one when none is alive and auto-open is on. The panel mirrors
+   * the result: a terminal that is activated is shown expanded, and a
+   * workspace with nothing to activate collapses the panel. Auto-open (OFF by
+   * default) only controls whether switching *spawns* a new terminal when none
+   * exists - it does not stop an existing terminal from being activated. Runs
+   * once per mount per workspace (guarded by followHandledRef, plus the shared
+   * creatingRef re-entrancy lock with the open effect so a fresh workspace
+   * never spawns two PTYs in the same tick). */
   useEffect(() => {
     if (!bootReady) return;
     if (typeof workspaceCwd !== "string" || workspaceCwd.length === 0) return;
     const key = normPath(workspaceCwd);
     if (followHandledRef.current === key) return;
     followHandledRef.current = key;
-    /* user turned auto-open OFF for this workspace: never spawn/activate on
-     * switch - terminals are created manually via +. */
-    if (!getAutofollow(key)) return;
-    /* One live terminal per workspace: a tab whose process died while its pane
-     * was unmounted (panel collapsed, or a different workspace on screen) comes
-     * back from the host as restored history (exited) on the next mount. Drop
-     * those dead tabs here so they never linger beside a fresh replacement as a
-     * "已退出" duplicate - the live tab below is the only one that should stay. */
+    /* Drop stale exited tabs for this workspace regardless of the auto-open
+     * toggle, so a dead tab never lingers beside its live replacement. */
     for (const dead of tabs.filter((t) => t.exited && normPath(t.cwd) === key)) {
       closeTab(dead.id);
     }
     const live = tabs.find((t) => !t.exited && normPath(t.cwd) === key);
     if (live) {
+      /* A terminal exists for this workspace: activate it and expand the panel
+       * so it is actually usable. */
       setActiveId(live.id);
+      setOpen(true);
+    } else if (getAutofollow(key)) {
+      /* No terminal yet and auto-open is ON: create one and show the panel. */
+      if (!creatingRef.current) {
+        creatingRef.current = true;
+        newTab().finally(() => { creatingRef.current = false; });
+      }
+      setOpen(true);
     } else {
-      newTab();
+      /* No terminal here and auto-open is OFF: nothing gets activated on this
+       * workspace, so collapse the panel instead of leaving an empty or
+       * foreign pane expanded. */
+      setOpen(false);
     }
-    /* Leave the panel's expand/collapse state to the user: switching sessions
-     * restores the last manual position (via the persisted `open` pref) instead
-     * of force-opening. We only activate-or-create the workspace terminal. */
+    /* Mark this switch as handled so the "first open" effect does not also
+     * auto-create on top of the activation/create above. */
     openHandled.current = true;
   }, [bootReady, workspaceCwd, tabs, newTab, closeTab]);
 
@@ -811,7 +961,15 @@ function TerminalPanel(props) {
     document.addEventListener("pointerup", up);
   }, []);
 
-  const toggle = useCallback(() => setOpen((v) => !v), []);
+  /* user toggle: opening the panel (collapsed -> expanded) marks it as a
+   * user-driven open so the .isEntering animation plays; closing does not. */
+  const toggle = useCallback(() => {
+    if (!open) setEntering(true);
+    setOpen((v) => !v);
+  }, [open]);
+  /* latest toggle kept for the keydown listener (which must stay stable) */
+  const toggleRef = useRef(toggle);
+  toggleRef.current = toggle;
 
   const stateLabel = busy
     ? "启动中…"
@@ -882,7 +1040,7 @@ function TerminalPanel(props) {
     open
       ? React.createElement(
           "div",
-          { className: "dshTermPanel", id: "dshTermPanel", style: { height: height + "px" } },
+          { className: "dshTermPanel" + (entering ? " isEntering" : ""), id: "dshTermPanel", style: { height: height + "px" } },
           React.createElement("div", {
             className: "dshTermResize",
             title: "拖动调整高度",
@@ -895,17 +1053,23 @@ function TerminalPanel(props) {
             React.createElement("span", { className: "dshTermTabsLead", "aria-hidden": true }, TerminalGlyph14()),
             React.createElement(
               "div",
-              { className: "dshTermTabsScroll", role: "tablist" },
+              { className: "dshTermTabsScroll", role: "tablist", ref: tabsScrollRef },
               ...tabs.map((t) =>
                 React.createElement(
                   "button",
                   {
                     key: t.id,
                     role: "tab",
+                    "data-tab-id": t.id,
+                    draggable: false,
                     "aria-selected": t.id === activeId,
-                    className: "dshTermTab" + (t.id === activeId ? " isActive" : "") + (t.exited ? " isExited" : ""),
+                    className: "dshTermTab" + (t.id === activeId ? " isActive" : "") + (t.exited ? " isExited" : "") + (t.id === draggingId ? " isDragging" : ""),
                     title: t.exited ? tabLabel(t) + " (已退出)" : tabLabel(t),
-                    onClick: () => setActiveId(t.id),
+                    onPointerDown: (e) => startTabDrag(e, t.id),
+                    onClick: () => {
+                      if (suppressClickRef.current) return;
+                      setActiveId(t.id);
+                    },
                   },
                   React.createElement("span", { className: "dshTermTabLead", "aria-hidden": true }, TerminalGlyph12()),
                   React.createElement("span", { className: "dshTermTabLabel" }, tabLabel(t)),
