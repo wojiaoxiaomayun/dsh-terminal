@@ -22,7 +22,22 @@ const HEIGHT_KEY = "dsh-plugin-terminal.height";
 /* user-chosen panel position, persisted so switching sessions restores the
  * manual expand/collapse state instead of force-expanding the panel */
 const OPEN_KEY = "dsh-plugin-terminal.open";
+/* per-workspace AUTO-OPEN preference, keyed by normalized workspace path.
+ * Defaults to OFF: switching to a workspace does not spawn a new terminal
+ * (saves resources) until the user switches the toggle on in the settings
+ * panel. */
+const AUTOFLLOW_PREFIX = "dsh-plugin-terminal.autofollow.";
 const MIN_HEIGHT = 120;
+
+/* per-workspace auto-open preference (default: off). Keyed by normalized path
+ * so the same dir (workspace or session cwd) maps to one flag. */
+function autofollowKey(norm) { return AUTOFLLOW_PREFIX + norm; }
+function getAutofollow(norm) {
+  try { return localStorage.getItem(autofollowKey(norm)) === "1"; } catch { return false; }
+}
+function setAutofollow(norm, on) {
+  try { localStorage.setItem(autofollowKey(norm), on ? "1" : "0"); } catch { /* storage unavailable */ }
+}
 
 /* xterm stylesheet served by the host plugin */
 const XTERM_CSS_TAG = "dsh-plugin-terminal-xterm-css";
@@ -36,7 +51,7 @@ if (typeof document !== "undefined" && document.getElementById(XTERM_CSS_TAG) ==
 
 /* Codex-style bottom panel skin (DSH design tokens; terminal surface dark). */
 const STYLE_TAG = "dsh-plugin-terminal-styles";
-const PANEL_CSS = ".dshTermRoot{position:fixed;bottom:0;z-index:50;font-family:Inter,var(--dsw-font-family)}\n.dshTermBar{box-sizing:border-box;width:100%;height:34px;display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--dsw-specific-tip);border-top:1px solid var(--dsw-alias-border-l1);cursor:pointer;color:var(--dsw-alias-label-primary);text-align:left;user-select:none;-webkit-user-select:none}\n.dshTermBar:focus-visible{outline:2px solid var(--dsw-alias-label-tertiary);outline-offset:-2px}\n.dshTermBarLead{color:var(--dsw-alias-label-tertiary);flex:none;place-items:center;display:grid}\n.dshTermBarTitle{min-width:0;flex:none;font-size:13px;font-weight:500;line-height:24px}\n.dshTermBarState{min-width:0;flex:auto;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.dshTermBarActions{flex:none;align-items:center;gap:2px;display:flex}\n.dshTermBarAction{width:28px;height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;border-radius:999px;flex:none;place-items:center;padding:0;display:grid}\n.dshTermBarAction:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermBarAction:focus-visible{outline:2px solid var(--dsw-alias-label-tertiary);outline-offset:-2px}\n.dshTermBarAction:disabled{cursor:default;opacity:.45}\n.dshTermBarChevron{width:28px;height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;border-radius:999px;flex:none;place-items:center;padding:0;display:grid}\n.dshTermBarChevron:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}\n.dshTermPanel{box-sizing:border-box;width:100%;display:flex;flex-direction:column;background:var(--dsw-specific-tip);border-top:1px solid var(--dsw-alias-border-l1);overflow:hidden;animation:dshTermIn .16s ease-out}\n@keyframes dshTermIn{from{transform:translateY(14px);opacity:.4}to{transform:none;opacity:1}}\n.dshTermResize{flex:none;height:6px;cursor:ns-resize;touch-action:none;position:relative}\n.dshTermResize:after{content:'';position:absolute;left:0;right:0;top:2px;height:2px;border-radius:2px;background:transparent;transition:background .15s}\n.dshTermResize:hover:after{background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermTabs{flex:none;box-sizing:border-box;height:36px;display:flex;align-items:center;gap:2px;padding:0 10px;border-bottom:1px solid var(--dsw-alias-border-l1);background:var(--dsw-specific-tip)}\n.dshTermTabsScroll{flex:1;min-width:0;display:flex;align-items:center;gap:2px;height:100%;overflow-x:auto;scrollbar-width:none}\n.dshTermTabsScroll::-webkit-scrollbar{display:none}\n.dshTermTabsLead{color:var(--dsw-alias-label-tertiary);flex:none;display:grid;place-items:center;margin-right:2px}\n.dshTermTabsState{flex:none;max-width:180px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0 6px}\n.dshTermTab{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 6px 0 9px;border-radius:7px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font-family:Inter,var(--dsw-font-family);font-size:12px;font-weight:500;cursor:pointer;flex:none;max-width:200px}\n.dshTermTab:hover{background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermTab.isActive{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}\n.dshTermTab:focus-visible{outline:2px solid var(--dsw-alias-label-tertiary);outline-offset:-2px}\n.dshTermTab.isExited{opacity:.5}\n.dshTermTab.isExited .dshTermTabLabel{text-decoration:line-through;text-decoration-thickness:1px}\n.dshTermTabLabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.dshTermTabLead{display:grid;place-items:center;flex:none;opacity:.7}\n.dshTermTabClose{width:20px;height:20px;border:none;background:transparent;color:inherit;border-radius:6px;display:grid;place-items:center;cursor:pointer;padding:0;opacity:0;flex:none}\n.dshTermTab:hover .dshTermTabClose,.dshTermTab.isActive .dshTermTabClose{opacity:.65}\n.dshTermTabClose:hover{opacity:1;background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermNew{width:26px;height:26px;flex:none;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);border-radius:7px;display:grid;place-items:center;cursor:pointer;padding:0}\n.dshTermNew:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}\n.dshTermNew:focus-visible{outline:2px solid var(--dsw-alias-label-tertiary);outline-offset:-2px}\n.dshTermNew:disabled{cursor:default;opacity:.45}\n.dshTermCollapse{flex:none;display:grid;place-items:center;width:26px;height:26px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);border-radius:7px;cursor:pointer;padding:0}\n.dshTermCollapse:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}\n.dshTermBody{flex:auto;min-height:0;position:relative;background:#1e2128;box-shadow:inset 0 1px 0 var(--dsw-alias-border-l1)}\n.dshTermPane{position:absolute;inset:0;display:none;padding:4px 10px 8px;background:#1e2128}\n.dshTermPane.isActive{display:block}\n.dshTermEmpty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#8b90a0;font-family:Inter,var(--dsw-font-family);font-size:12px}\n.dshTermEmptyBtn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:8px;border:1px solid var(--dsw-alias-border-l1);background:#2a2e38;color:#e6e8ee;font-family:Inter,var(--dsw-font-family);font-size:12px;font-weight:500;cursor:pointer}\n.dshTermEmptyBtn:hover{background:#343946}\nbody.dshTermResizing{cursor:ns-resize!important;user-select:none!important;-webkit-user-select:none!important}";
+const PANEL_CSS = ".dshTermRoot{position:fixed;bottom:0;z-index:50;font-family:Inter,var(--dsw-font-family)}\n.dshTermBar{box-sizing:border-box;width:100%;height:34px;display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--dsw-specific-tip);border-top:1px solid var(--dsw-alias-border-l1);cursor:pointer;color:var(--dsw-alias-label-primary);text-align:left;user-select:none;-webkit-user-select:none}\n.dshTermBar:focus-visible{outline:2px solid var(--dsw-alias-label-tertiary);outline-offset:-2px}\n.dshTermBarLead{color:var(--dsw-alias-label-tertiary);flex:none;place-items:center;display:grid}\n.dshTermBarTitle{min-width:0;flex:none;font-size:13px;font-weight:500;line-height:24px}\n.dshTermBarState{min-width:0;flex:auto;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.dshTermBarActions{flex:none;align-items:center;gap:2px;display:flex}\n.dshTermBarAction{width:28px;height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;border-radius:999px;flex:none;place-items:center;padding:0;display:grid}\n.dshTermBarAction:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermBarAction:focus-visible{outline:2px solid var(--dsw-alias-label-tertiary);outline-offset:-2px}\n.dshTermBarAction:disabled{cursor:default;opacity:.45}\n.dshTermBarChevron{width:28px;height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;border-radius:999px;flex:none;place-items:center;padding:0;display:grid}\n.dshTermBarChevron:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}\n.dshTermPanel{box-sizing:border-box;width:100%;display:flex;flex-direction:column;background:var(--dsw-specific-tip);border-top:1px solid var(--dsw-alias-border-l1);overflow:hidden;animation:dshTermIn .16s ease-out}\n@keyframes dshTermIn{from{transform:translateY(14px);opacity:.4}to{transform:none;opacity:1}}\n.dshTermResize{flex:none;height:6px;cursor:ns-resize;touch-action:none;position:relative}\n.dshTermResize:after{content:'';position:absolute;left:0;right:0;top:2px;height:2px;border-radius:2px;background:transparent;transition:background .15s}\n.dshTermResize:hover:after{background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermTabs{flex:none;box-sizing:border-box;height:36px;display:flex;align-items:center;gap:2px;padding:0 10px;border-bottom:1px solid var(--dsw-alias-border-l1);background:var(--dsw-specific-tip)}\n.dshTermTabsScroll{flex:1;min-width:0;display:flex;align-items:center;gap:2px;height:100%;overflow-x:auto;scrollbar-width:none}\n.dshTermTabsScroll::-webkit-scrollbar{display:none}\n.dshTermTabsLead{color:var(--dsw-alias-label-tertiary);flex:none;display:grid;place-items:center;margin-right:2px}\n.dshTermTabsState{flex:none;max-width:180px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0 6px}\n.dshTermTab{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 6px 0 9px;border-radius:7px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font-family:Inter,var(--dsw-font-family);font-size:12px;font-weight:500;cursor:pointer;flex:none;max-width:200px}\n.dshTermTab:hover{background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermTab.isActive{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}\n.dshTermTab:focus-visible{outline:2px solid var(--dsw-alias-label-tertiary);outline-offset:-2px}\n.dshTermTab.isExited{opacity:.5}\n.dshTermTab.isExited .dshTermTabLabel{text-decoration:line-through;text-decoration-thickness:1px}\n.dshTermTabLabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.dshTermTabLead{display:grid;place-items:center;flex:none;opacity:.7}\n.dshTermTabClose{width:20px;height:20px;border:none;background:transparent;color:inherit;border-radius:6px;display:grid;place-items:center;cursor:pointer;padding:0;opacity:0;flex:none}\n.dshTermTab:hover .dshTermTabClose,.dshTermTab.isActive .dshTermTabClose{opacity:.65}\n.dshTermTabClose:hover{opacity:1;background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermNew{width:26px;height:26px;flex:none;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);border-radius:7px;display:grid;place-items:center;cursor:pointer;padding:0}\n.dshTermNew:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}\n.dshTermNew:focus-visible{outline:2px solid var(--dsw-alias-label-tertiary);outline-offset:-2px}\n.dshTermNew:disabled{cursor:default;opacity:.45}\n.dshTermCollapse{flex:none;display:grid;place-items:center;width:26px;height:26px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);border-radius:7px;cursor:pointer;padding:0}\n.dshTermCollapse:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}\n.dshTermBody{flex:auto;min-height:0;position:relative;background:#1e2128;box-shadow:inset 0 1px 0 var(--dsw-alias-border-l1)}\n.dshTermPane{position:absolute;inset:0;display:none;padding:4px 10px 8px;background:#1e2128}\n.dshTermPane.isActive{display:block}\n.dshTermEmpty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#8b90a0;font-family:Inter,var(--dsw-font-family);font-size:12px}\n.dshTermEmptyBtn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:8px;border:1px solid var(--dsw-alias-border-l1);background:#2a2e38;color:#e6e8ee;font-family:Inter,var(--dsw-font-family);font-size:12px;font-weight:500;cursor:pointer}\n.dshTermEmptyBtn:hover{background:#343946}\nbody.dshTermResizing{cursor:ns-resize!important;user-select:none!important;-webkit-user-select:none!important}\n.dshTermSettings{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;background:rgba(8,10,14,.45);backdrop-filter:blur(2px);padding:24px;box-sizing:border-box}\n.dshTermSettingsCard{width:min(460px,92vw);max-height:70vh;overflow:auto;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-surface-secondary,#1c1f27);color:var(--dsw-alias-label-primary);box-shadow:0 18px 60px rgba(0,0,0,.45);font-family:Inter,var(--dsw-font-family);display:flex;flex-direction:column}\n.dshTermSettingsHead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 14px 6px;flex:none;font-size:13px;font-weight:600}\n.dshTermSettingsTitle{min-width:0}\n.dshTermSettingsHint{padding:0 14px 10px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5}\n.dshTermSettingsList{display:flex;flex-direction:column;padding:0 10px 12px;gap:2px}\n.dshTermSettingsRow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:12.5px}\n.dshTermSettingsRow:hover{background:var(--dsw-alias-interactive-bg-hover)}\n.dshTermSettingsRow.dshTermSettingsMuted{color:var(--dsw-alias-label-tertiary);justify-content:center;cursor:default}\n.dshTermSettingsName{min-width:0;display:flex;flex-direction:column;gap:1px}\n.dshTermSettingsDir{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.dshTermSettingsPath{color:var(--dsw-alias-label-tertiary);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n.dshTermSettingsToggle{flex:none;width:34px;height:20px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-interactive-bg-hover);cursor:pointer;padding:0;position:relative;transition:background .15s}\n.dshTermSettingsToggle.isOn{background:#3b82f6;border-color:#3b82f6}\n.dshTermSettingsToggleKnob{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s}\n.dshTermSettingsToggle.isOn .dshTermSettingsToggleKnob{transform:translateX(14px)}";
 if (typeof document !== "undefined" && document.getElementById(STYLE_TAG) === null) {
   const tag = document.createElement("style");
   tag.id = STYLE_TAG;
@@ -158,6 +173,28 @@ function Refresh14() {
     "svg",
     { width: 14, height: 14, viewBox: "0 0 14 14", fill: "none", xmlns: "http://www.w3.org/2000/svg" },
     React.createElement("path", { d: "M1.272 6.21348C1.70645 3.08888 4.59169 0.908064 7.71634 1.34239C8.95495 1.51469 10.0438 2.07331 10.8814 2.87755L11.9458 1.81407C12.1347 1.6255 12.4572 1.75911 12.4575 2.02598V5.08751C12.4574 5.25303 12.3233 5.38731 12.1577 5.38731H9.0972C8.82993 5.38731 8.69629 5.06361 8.88528 4.87462L10.0327 3.72618C9.3732 3.09994 8.52006 2.66569 7.5513 2.53087C5.08313 2.18779 2.80376 3.91044 2.46048 6.37852C2.11747 8.84665 3.84009 11.1261 6.30814 11.4693C8.77612 11.8121 11.0557 10.0896 11.399 7.62148L12.728 7.80531C12.2935 10.9299 9.4083 13.1107 6.28366 12.6764C3.159 12.2421 0.977243 9.35731 1.272 6.21348Z", fill: "currentColor" }),
+  );
+}
+function Settings14() {
+  return React.createElement(
+    "svg",
+    { width: 14, height: 14, viewBox: "0 0 16 16", fill: "none", xmlns: "http://www.w3.org/2000/svg" },
+    React.createElement("path", {
+      d: "M8 5.6A2.4 2.4 0 108 10.4 2.4 2.4 0 108 5.6z",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: 1.1,
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+    }),
+    React.createElement("path", {
+      d: "M13.6 8c0-.34-.03-.68-.08-1l1.08-.88a.6.6 0 00.14-.75L13.5 3.7a.6.6 0 00-.72-.26l-1.32.44A4.9 4.9 0 0010 3.05L9.78 1.7A.6.6 0 009.18 1.3L8 1.3a.6.6 0 00-.6.53l-.22 1.72A5.5 5.5 0 005.6 4l-1.32-.44a.6.6 0 00-.72.26L2.15 5.61a.6.6 0 00.14.75l1.08.9c-.08.24-.16.48-.22.74H3.4a.6.6 0 00-.6.6v3.4c0 .33.27.6.6.6h1.76c.26.3.54.58.84.83l.22 1.84a.6.6 0 00.6.52h3.36a.6.6 0 00.6-.52l.22-1.84c.33-.25.62-.53.87-.83h1.73a.6.6 0 00.6-.6V8a.6.6 0 00-.6-.6z",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: 1.1,
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+    }),
   );
 }
 function Close14() {
@@ -473,6 +510,48 @@ function TerminalPanel(props) {
   /** normalized workspace path this mount has already followed (activate-or-create);
    *  guards the follow effect so a settling mount never re-fires it */
   const followHandledRef = useRef(null);
+  /** settings modal: lists every workspace with a per-workspace auto-open toggle */
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [workspaces, setWorkspaces] = useState([]);
+  const [workspacesLoaded, setWorkspacesLoaded] = useState(false);
+  /* normalized-path -> autoOpen boolean, mirroring localStorage for the open
+   * settings modal (a toggle flips both in one go) */
+  const [autofollowMap, setAutofollowMap] = useState({});
+  const readAutofollowMap = useCallback((wsList) => {
+    const map = {};
+    for (const w of wsList) {
+      if (typeof w?.path === "string") map[normPath(w.path)] = getAutofollow(normPath(w.path));
+    }
+    setAutofollowMap(map);
+  }, []);
+  const refreshWorkspaces = useCallback(async () => {
+    try {
+      const data = await api("/workspaces");
+      const list = Array.isArray(data?.workspaces) ? data.workspaces : [];
+      setWorkspaces(list);
+      readAutofollowMap(list);
+    } catch (err) {
+      console.error("[dsh-plugin-terminal] list workspaces failed:", err);
+      setWorkspaces([]);
+    } finally {
+      setWorkspacesLoaded(true);
+    }
+  }, [readAutofollowMap]);
+  const toggleAutofollow = useCallback((norm) => {
+    setAutofollowMap((prev) => {
+      const next = !(prev[norm] ?? false);
+      setAutofollow(norm, next);
+      return { ...prev, [norm]: next };
+    });
+  }, []);
+  /* load the workspace list each time the settings panel is opened, so new
+   * workspaces show up without needing a plugin/app restart */
+  useEffect(() => {
+    if (settingsOpen) {
+      setWorkspacesLoaded(false);
+      refreshWorkspaces();
+    }
+  }, [settingsOpen, refreshWorkspaces]);
   const rootRef = useRef(null);
   /** conversation-column geometry: the panel never covers the side rails */
   const [geo, setGeo] = useState({ left: 0, width: window.innerWidth });
@@ -559,16 +638,19 @@ function TerminalPanel(props) {
   }, []);
 
   /* first open with no restored tabs: create one session. openHandled guards
-   * so closing the last tab does NOT auto-create - only a fresh open does. */
+   * so closing the last tab does NOT auto-create - only a fresh open does.
+   * Honors the workspace auto-open toggle: with it OFF (default) opening the
+   * panel never spawns a terminal - the user creates one via +. */
   useEffect(() => {
     if (!open) {
       openHandled.current = false;
       return;
     }
     if (!bootReady || tabs.length > 0 || openHandled.current) return;
+    if (typeof workspaceCwd !== "string" || workspaceCwd.length === 0 || !getAutofollow(normPath(workspaceCwd))) return;
     openHandled.current = true;
     newTab();
-  }, [open, bootReady, tabs.length]);
+  }, [open, bootReady, tabs.length, workspaceCwd]);
 
   /* fetch the host-side plugin config: the toggle shortcut (and, for future
    * use, the configured shell command). Falls back to the defaults when the
@@ -649,16 +731,20 @@ function TerminalPanel(props) {
 
   /* Follow the CURRENT workspace: once boot restore is done and this mount's
    * workspace path is known, activate the live terminal already rooted there,
-   * or create one when none is alive — then expand the panel so the terminal
-   * is visible and focused. Runs once per mount per workspace (guarded by
-   * followHandledRef); the open effect's auto-create is pre-empted via
-   * openHandled so a fresh workspace never spawns two PTYs. */
+   * or create one when none is alive. This ONLY runs when auto-open is enabled
+   * for that workspace (settings panel toggle) - defaults to OFF so switching
+   * workspaces does not spawn terminals from nowhere. Runs once per mount per
+   * workspace (guarded by followHandledRef); the open effect's auto-create is
+   * pre-empted via openHandled so a fresh workspace never spawns two PTYs. */
   useEffect(() => {
     if (!bootReady) return;
     if (typeof workspaceCwd !== "string" || workspaceCwd.length === 0) return;
     const key = normPath(workspaceCwd);
     if (followHandledRef.current === key) return;
     followHandledRef.current = key;
+    /* user turned auto-open OFF for this workspace: never spawn/activate on
+     * switch - terminals are created manually via +. */
+    if (!getAutofollow(key)) return;
     /* One live terminal per workspace: a tab whose process died while its pane
      * was unmounted (panel collapsed, or a different workspace on screen) comes
      * back from the host as restored history (exited) on the next mount. Drop
@@ -733,6 +819,63 @@ function TerminalPanel(props) {
       ? tabs.length === 0 ? "无会话" : "空闲"
       : active.exited ? tabLabel(active) + " 已退出，点 ⟳ 重启" : tabLabel(active);
 
+  const settingsModal = React.createElement(
+    "div",
+    { className: "dshTermSettings", onClick: (e) => { if (e.target === e.currentTarget) setSettingsOpen(false); } },
+    React.createElement(
+      "div",
+      { className: "dshTermSettingsCard", role: "dialog", "aria-modal": "true" },
+      React.createElement(
+        "div",
+        { className: "dshTermSettingsHead" },
+        React.createElement("span", { className: "dshTermSettingsTitle" }, "终端设置 — 各工作区自动打开"),
+        React.createElement(
+          "button",
+          { className: "dshTermBarAction", title: "关闭", "aria-label": "关闭", onClick: () => setSettingsOpen(false) },
+          Close14(),
+        ),
+      ),
+      React.createElement(
+        "div",
+        { className: "dshTermSettingsHint" },
+        "开启后，切换到该工作区会自动打开（或激活）它的终端；关闭（默认）则仅手动创建，不自动打开，以节省资源。",
+      ),
+      React.createElement(
+        "div",
+        { className: "dshTermSettingsList" },
+        !workspacesLoaded
+          ? React.createElement("div", { className: "dshTermSettingsRow dshTermSettingsMuted" }, "加载中…")
+          : workspaces.length === 0
+            ? React.createElement("div", { className: "dshTermSettingsRow dshTermSettingsMuted" }, "还没有工作区。")
+            : workspaces.map((w) => {
+                const norm = normPath(w.path);
+                const on = autofollowMap[norm] ?? false;
+                return React.createElement(
+                  "label",
+                  { key: w.id ?? w.path, className: "dshTermSettingsRow" },
+                  React.createElement(
+                    "span",
+                    { className: "dshTermSettingsName" },
+                    React.createElement("span", { className: "dshTermSettingsDir" }, w.title || ""),
+                    React.createElement("span", { className: "dshTermSettingsPath" }, w.path || ""),
+                  ),
+                  React.createElement(
+                    "button",
+                    {
+                      className: "dshTermSettingsToggle" + (on ? " isOn" : ""),
+                      role: "switch",
+                      "aria-checked": on,
+                      title: on ? "已开启自动打开" : "已关闭自动打开",
+                      onClick: () => toggleAutofollow(norm),
+                    },
+                    React.createElement("span", { className: "dshTermSettingsToggleKnob", "aria-hidden": true }),
+                  ),
+                );
+              }),
+      ),
+    ),
+  );
+
   return React.createElement(
     "div",
     { className: "dshTermRoot", ref: rootRef, style: { left: geo.left + "px", width: geo.width + "px" } },
@@ -804,6 +947,11 @@ function TerminalPanel(props) {
               : null,
             React.createElement(
               "button",
+              { className: "dshTermBarAction", title: "终端设置（各工作区自动打开）", "aria-label": "终端设置", onClick: () => setSettingsOpen(true) },
+              Settings14(),
+            ),
+            React.createElement(
+              "button",
               {
                 className: "dshTermCollapse",
                 title: "收起面板（" + shortcutLabel + "）",
@@ -869,9 +1017,15 @@ function TerminalPanel(props) {
                   Refresh14(),
                 )
               : null,
+            React.createElement(
+              "button",
+              { className: "dshTermBarAction", title: "终端设置（各工作区自动打开）", "aria-label": "终端设置", onClick: () => setSettingsOpen(true) },
+              Settings14(),
+            ),
           ),
           React.createElement("span", { className: "dshTermBarChevron", "aria-hidden": true }, ChevronUp14()),
         ),
+    settingsOpen ? settingsModal : null,
   );
 }
 export { TerminalPanel };
