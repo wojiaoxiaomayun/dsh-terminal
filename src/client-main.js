@@ -19,6 +19,9 @@ import { parseShortcut, matchesShortcut } from "./shortcut.js";
 
 const PREFIX = "/terminal-panel";
 const HEIGHT_KEY = "dsh-plugin-terminal.height";
+/* user-chosen panel position, persisted so switching sessions restores the
+ * manual expand/collapse state instead of force-expanding the panel */
+const OPEN_KEY = "dsh-plugin-terminal.open";
 const MIN_HEIGHT = 120;
 
 /* xterm stylesheet served by the host plugin */
@@ -410,7 +413,19 @@ function TermPane({ tab, active, onExit }) {
 function TerminalPanel(props) {
   const { useEffect, useRef, useState, useCallback } = React;
   const { sessionId, useSessions, useWorkspaces } = props ?? {};
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem(OPEN_KEY) === "1";
+    } catch { /* storage unavailable */ }
+    return false;
+  });
+  /* persist the panel position so a session switch restores the user's last
+   * manual expand/collapse choice instead of force-opening the panel */
+  useEffect(() => {
+    try {
+      localStorage.setItem(OPEN_KEY, open ? "1" : "0");
+    } catch { /* storage unavailable */ }
+  }, [open]);
   /** cwd of the DSH session this panel is mounted in. Prefer the workspace
    *  membership (what the user sees on screen - the workspace the session
    *  lives in), then the session summary cwd, then the parent session's cwd
@@ -658,8 +673,10 @@ function TerminalPanel(props) {
     } else {
       newTab();
     }
+    /* Leave the panel's expand/collapse state to the user: switching sessions
+     * restores the last manual position (via the persisted `open` pref) instead
+     * of force-opening. We only activate-or-create the workspace terminal. */
     openHandled.current = true;
-    setOpen(true);
   }, [bootReady, workspaceCwd, tabs, newTab, closeTab]);
 
   /* header refresh: restart the active tab IN PLACE via the host restart
