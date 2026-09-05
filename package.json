@@ -1,6 +1,6 @@
 {
   "name": "@dsh-xhl/dsh-plugin-terminal",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Bottom terminal panel plugin for DeepSeek Harness Web GUI (node-pty powered, works on Windows via ConPTY)",
   "type": "module",
   "main": "lib/index.js",
@@ -35,7 +35,7 @@
     "ws": "^8.21.3"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-settings": "^0.1.0-rc.7",
+    "@deepseek-ai/dsh-settings": "^0.1.2-rc.1",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "license": "MIT",
