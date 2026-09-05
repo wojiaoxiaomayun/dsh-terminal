@@ -262,7 +262,13 @@ function TermPane({ tab, active, onExit }) {
     term.loadAddon(fit);
     /* Ctrl+click (Cmd+click on macOS) opens http(s) links in the browser.
      * Plain clicks still select text, so this never steals selection. */
-    term.loadAddon(new WebLinksAddon((_event, uri) => {
+    /* Links open on ctrl+click (cmd+click on macOS) ONLY: addon-web-links
+     * 0.11 wires the handler straight up as the link's activate callback with
+     * no modifier check, so a plain click would navigate. Gate it here - which
+     * also stops a drag-selection that happens to end on a link from
+     * accidentally opening it. */
+    term.loadAddon(new WebLinksAddon((event, uri) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
       window.open(uri, "_blank", "noopener,noreferrer");
     }));
     term.open(host);
@@ -287,7 +293,74 @@ function TermPane({ tab, active, onExit }) {
         ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
       }
     };
-    ws.onmessage = (ev) => term.write(ev.data);
+    /* Output pump + select freeze. Two properties make selection during a
+     * running job deterministic:
+     * 1. The pump coalesces arriving chunks (one rAF tick) and never feeds
+     *    xterm while a previous chunk is still parsing (write-callback
+     *    handshake, capped slice size). So at mousedown at most ONE small
+     *    chunk is in flight - the earlier per-frame pump still let an
+     *    unbounded backlog build whenever parsing lagged behind arrivals,
+     *    and those renders landed exactly on the lines near the streaming
+     *    edge, which is why selection there failed while far lines (whose
+     *    text only shifts, never changes) kept working.
+     * 2. While the button is down the pump stops feeding entirely; on
+     *    release the copy handler (term.element) has already captured the
+     *    frozen selection (bubbling fires it before the window-level
+     *    endSelect), then the backlog replays through the same drain chain. */
+    let disposed = false;
+    let selecting = false;
+    let holding = false; /* released, but replay deferred past the multi-click window */
+    let pending = "";
+    let writing = false; /* a chunk is inside xterm's write buffer */
+    let pumpRaf = 0;
+    let flushTimer = 0;
+    const MAX_FEED = 131072; /* bound one write so a huge replay drains in slices */
+    const feedNext = () => {
+      if (disposed || selecting || holding || writing || pending === "") return;
+      const chunk = pending.length > MAX_FEED ? pending.slice(0, MAX_FEED) : pending;
+      pending = pending.length > MAX_FEED ? pending.slice(MAX_FEED) : "";
+      writing = true;
+      term.write(chunk, () => {
+        writing = false;
+        feedNext(); /* drain chain: next slice, or idle */
+      });
+    };
+    const pump = () => {
+      pumpRaf = 0;
+      feedNext();
+    };
+    const schedulePump = () => {
+      if (pumpRaf === 0) pumpRaf = requestAnimationFrame(pump);
+    };
+    const beginSelect = () => {
+      selecting = true;
+      /* a press inside the multi-click window continues the previous gesture:
+       * cancel the deferred replay and keep the freeze, so the content does
+       * not shift between the clicks of a double/triple click */
+      if (flushTimer !== 0) { clearTimeout(flushTimer); flushTimer = 0; }
+      holding = false;
+    };
+    const endSelect = () => {
+      if (!selecting) return;
+      selecting = false;
+      /* Defer the replay past the browser multi-click window (~500ms). The
+       * double-clicked URL is exactly the case this exists for: replaying on
+       * the FIRST mouseup appends lines between the two clicks, so the second
+       * click's event.detail=2 word-selection lands on a cell the URL already
+       * moved away from - empty selection, nothing copied. Holding the freeze
+       * across the clicks keeps the word under the cursor. */
+      holding = true;
+      if (flushTimer !== 0) clearTimeout(flushTimer);
+      flushTimer = setTimeout(() => {
+        flushTimer = 0;
+        holding = false;
+        feedNext();
+      }, 500);
+    };
+    ws.onmessage = (ev) => {
+      pending += ev.data;
+      schedulePump();
+    };
     /* Whether this pane attached to a LIVE process at mount. Restored history
      * tabs (tab.exited === true) replay their buffer and then receive the same
      * "session exited" close, but must NOT auto-close - they are the
@@ -353,7 +426,15 @@ function TermPane({ tab, active, onExit }) {
       }
     };
     const copySelection = (ev) => {
-      /* left-button release only: right-click is paste, don't re-copy */
+      /* window-level release with a gesture guard: full-line and multi-line
+       * drags routinely END outside the xterm element - in the pane padding
+       * when grabbing a line edge, or on the page below after drag-scroll -
+       * and a term.element mouseup listener missed exactly those releases,
+       * which is why "fully selected" lines/regions never copied while
+       * partial ones did. `selecting` is only true for a gesture that
+       * started on this pane, so unrelated page clicks never copy. Left
+       * button only: right-click is paste, don't re-copy. */
+      if (!selecting) return;
       if (ev.button !== 0) return;
       if (!term.hasSelection()) return;
       const text = term.getSelection();
@@ -404,11 +485,25 @@ function TermPane({ tab, active, onExit }) {
       return true;
     };
     term.attachCustomKeyEventHandler(onCustomKey);
-    term.element.addEventListener("mouseup", copySelection);
+    /* press anywhere on the pane (host includes the padding) engages the
+     * freeze, so edge-started full-line drags are covered too */
+    host.addEventListener("mousedown", beginSelect);
+    /* window-level release; registration order matters: copySelection runs
+     * first and reads the frozen selection, endSelect then defers the replay
+     * (500ms multi-click hold) */
+    window.addEventListener("mouseup", copySelection);
+    window.addEventListener("mouseup", endSelect);
+    window.addEventListener("blur", endSelect);
     term.element.addEventListener("contextmenu", pasteClipboard);
 
     return () => {
-      term.element.removeEventListener("mouseup", copySelection);
+      disposed = true;
+      if (pumpRaf !== 0) cancelAnimationFrame(pumpRaf);
+      if (flushTimer !== 0) clearTimeout(flushTimer);
+      host.removeEventListener("mousedown", beginSelect);
+      window.removeEventListener("mouseup", copySelection);
+      window.removeEventListener("mouseup", endSelect);
+      window.removeEventListener("blur", endSelect);
       term.element.removeEventListener("contextmenu", pasteClipboard);
       ws.onclose = null;
       ws.close();
